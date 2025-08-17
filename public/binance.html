@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Binance Coin Bilgileri</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f7f7f7; margin: 40px; }
+    #container { background: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
+    h2 { color: #1e88e5; }
+    select, p { font-size: 1.1em; }
+    #coinInfo { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <h2>Binance Coin Bilgileri</h2>
+  <label for="coinSearch">Coin Ara:</label>
+  <input type="text" id="coinSearch" placeholder="Coin adı yazın..." style="width:100%;margin-bottom:10px;">
+  <label for="coinSelect">Coin Seçin:</label>
+  <select id="coinSelect"></select>
+  <div id="coinInfo"></div>
+  <div id="coinDetails" style="margin-top:30px; background:#f0f4f8; border-radius:10px; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,0.07); min-height:120px;"></div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    let allCoins = [];
+    async function fetchCoins() {
+      const res = await fetch('https://api.binance.com/api/v3/exchangeInfo');
+      const data = await res.json();
+      return data.symbols.map(s => s.symbol);
+    }
+    async function fetchCoinData(symbol) {
+      const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`);
+      return await res.json();
+    }
+    function filterCoins(query) {
+      query = query.trim().toUpperCase();
+      return allCoins.filter(coin => coin.includes(query));
+    }
+    function updateDropdown(filteredCoins) {
+      const select = document.getElementById('coinSelect');
+      select.innerHTML = '';
+      filteredCoins.forEach(coin => {
+        const option = document.createElement('option');
+        option.value = coin;
+        option.textContent = coin;
+        select.appendChild(option);
+      });
+      if (filteredCoins.length > 0) {
+        select.value = filteredCoins[0];
+        showCoinInfo();
+      } else {
+        document.getElementById('coinInfo').innerHTML = '';
+      }
+    }
+    async function populateCoins() {
+      allCoins = await fetchCoins();
+      updateDropdown(allCoins);
+      document.getElementById('coinSelect').addEventListener('change', showCoinInfo);
+      document.getElementById('coinSearch').addEventListener('input', function(e) {
+        const filtered = filterCoins(e.target.value);
+        updateDropdown(filtered);
+      });
+    }
+    async function showCoinInfo() {
+      const select = document.getElementById('coinSelect');
+      if (!select.value) return;
+      const symbol = select.value;
+      const data = await fetchCoinData(symbol);
+      document.getElementById('coinInfo').innerHTML = `
+        <h3>${symbol}</h3>
+        <p>Son Fiyat: <b>${data.lastPrice}</b></p>
+        <p>24 Saatlik Hacim: <b>${data.volume}</b></p>
+      `;
+      // Alt detaylı bölüm ve grafik
+      document.getElementById('coinDetails').innerHTML = `
+        <h4 style='color:#1e88e5;'>Detaylı Bilgiler</h4>
+        <table style='width:100%;font-size:1.05em;'>
+          <tr><td><b>Coin:</b></td><td>${symbol}</td></tr>
+          <tr><td><b>Son Fiyat:</b></td><td>${data.lastPrice}</td></tr>
+          <tr><td><b>24 Saatlik Hacim:</b></td><td>${data.volume}</td></tr>
+          <tr><td><b>24 Saatlik Fiyat Değişimi:</b></td><td>${data.priceChangePercent}%</td></tr>
+          <tr><td><b>En Yüksek Fiyat (24h):</b></td><td>${data.highPrice}</td></tr>
+          <tr><td><b>En Düşük Fiyat (24h):</b></td><td>${data.lowPrice}</td></tr>
+        </table>
+        <div id='chartContainer' style='margin-top:30px;'>
+          <canvas id='priceChart' width='350' height='180'></canvas>
+        </div>
+      `;
+      drawChart(symbol);
+    }
+    // Chart.js ile fiyat grafiği çizimi
+    async function drawChart(symbol) {
+      const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=24`);
+      const klines = await res.json();
+      const labels = klines.map(k => {
+        const d = new Date(k[0]);
+        return `${d.getHours()}:00`;
+      });
+      const prices = klines.map(k => parseFloat(k[4])); // Kapanış fiyatı
+      if (window.priceChartObj) window.priceChartObj.destroy();
+      const ctx = document.getElementById('priceChart').getContext('2d');
+      window.priceChartObj = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: symbol + ' Fiyat (Son 24 Saat)',
+            data: prices,
+            borderColor: '#1e88e5',
+            backgroundColor: 'rgba(30,136,229,0.08)',
+            fill: true,
+            tension: 0.2
+          }]
+        },
+        options: {
+          scales: {
+            x: { display: true },
+            y: { display: true }
+          },
+          plugins: {
+            legend: { display: false }
+          }
+        }
+      });
+    }
+    populateCoins();
+  </script>
+</body>
+</html>
